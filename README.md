@@ -37,7 +37,7 @@ The install scripts build githelper from a checkout with Go and install it. In a
 | Command | Where githelper goes | Path |
 | --- | --- | --- |
 | `./install.sh` | `$HOME/.local/bin/githelper`, the directory created when missing | added to `PATH` in the profile of the login shell when missing |
-| `./install.sh -p <dir>` | `<dir>/githelper`; `<dir>` must exist, and `sudo` is used when it is not writable, as `/usr/bin` | not changed |
+| `./install.sh -p <dir>` | `<dir>/githelper`; `<dir>` must exist, and `sudo` is used when it is not writable, as `/usr/bin` | added to `PATH` the same way |
 | `install.cmd` | `%USERPROFILE%\.local\bin\githelper.exe`, the folders created when missing | added to the user Path when missing |
 | `install.cmd /globalenv` | the same | added to the machine Path; needs an administrator |
 | `install.cmd /path<dir>`, `/path:<dir>` | `<dir>\githelper.exe`; `<dir>` must exist | user Path, or machine Path with `/globalenv` |
@@ -45,7 +45,9 @@ The install scripts build githelper from a checkout with Go and install it. In a
 | `Install-Githelper.ps1 -GlobalEnvironment` | as `install.cmd /globalenv` | machine Path |
 | `Install-Githelper.ps1 -Path <dir>`, with or without `-GlobalEnvironment` | as `install.cmd /path` | user or machine Path |
 
-`install.sh` is POSIX `sh`, for Linux, macOS and the BSDs; `Install-Githelper.ps1` needs PowerShell 7. Their help is
+`install.sh` writes to the profile its login shell reads: `~/.bash_profile` for bash (`~/.profile` when there is
+none), `~/.zprofile` for zsh, `~/.config/fish/conf.d/githelper.fish` for fish, and `~/.profile` for dash, ksh and any
+other shell; each directory once. `install.sh` is POSIX `sh`, for Linux, macOS and the BSDs; `Install-Githelper.ps1` needs PowerShell 7. Their help is
 `install.sh -h`, `install.cmd /?` or `install.cmd /HELP`, and `Install-Githelper.ps1 -Help`. The options of
 `install.sh` and `install.cmd` are case-sensitive, except `/HELP`; those of `Install-Githelper.ps1` are not.
 

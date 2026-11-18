@@ -71,8 +71,11 @@ jobs:
           test -x "$home/.local/bin/githelper"
           grep -q 'Added by githelper' "$home/.bash_profile" "$home/.profile" 2>/dev/null
           HOME="$home" SHELL=/bin/bash sh ./install.sh | grep -q 'already'
-          sh ./install.sh -p "$RUNNER_TEMP/dest"
+          HOME="$home" SHELL=/bin/zsh sh ./install.sh -p "$RUNNER_TEMP/dest"
           "$RUNNER_TEMP/dest/githelper" --help | grep -q 'Guarded Git workflow'
+          grep -qF "$RUNNER_TEMP/dest" "$home/.zprofile"
+          HOME="$home" SHELL=/usr/bin/fish sh ./install.sh
+          grep -q 'fish_add_path' "$home/.config/fish/conf.d/githelper.fish"
           if sh ./install.sh -p "$RUNNER_TEMP/missing"; then exit 1; fi
           sh ./install.sh -h | grep -q 'Usage: install.sh'
           if sh ./install.sh -H; then exit 1; fi

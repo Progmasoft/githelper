@@ -8,8 +8,9 @@
 #   install.sh            installs $HOME/.local/bin/githelper, creating the
 #                         directory, and adds it to PATH in the profile of the
 #                         login shell when PATH lacks it
-#   install.sh -p <dir>   installs <dir>/githelper; <dir> must exist, and sudo
-#                         is used when it is not writable
+#   install.sh -p <dir>   installs <dir>/githelper; <dir> must exist, sudo is
+#                         used when it is not writable, and <dir> is added to
+#                         PATH the same way
 #   install.sh -h         shows this help
 
 set -eu
@@ -21,12 +22,16 @@ Usage: install.sh [-p <directory>] [-h]
 Builds githelper from this checkout with Go and installs it.
 
   (no option)      Install $HOME/.local/bin/githelper. The directory is
-                   created when missing, and added to PATH in the profile of
-                   your login shell when PATH does not have it.
+                   created when missing.
   -p <directory>   Install <directory>/githelper. The directory must exist;
                    it is not created. When it is not writable, as /usr/bin,
-                   sudo is used for the copy. PATH is not changed.
+                   sudo is used for the copy.
   -h               Show this help.
+
+Either way, the directory is added to PATH when PATH does not have it, in the
+profile your login shell reads: bash ~/.bash_profile (or ~/.profile when there
+is no ~/.bash_profile), zsh ~/.zprofile, fish ~/.config/fish/conf.d/githelper.fish,
+dash and ksh ~/.profile; any other shell ~/.profile.
 
 Options are case-sensitive.
 EOF
@@ -82,30 +87,44 @@ printf 'installed %s/githelper\n' "$target"
 case ":${PATH:-}:" in
     *":$target:"*) exit 0 ;;
 esac
-if [ "$default" -eq 0 ]; then
-    printf 'note: %s is not in PATH\n' "$target"
-    exit 0
-fi
 
-# PATH lacks $HOME/.local/bin: add it in the profile the login shell reads,
-# with $HOME and $PATH written as they are, for the shell to expand.
-marker="# Added by githelper's install.sh"
-export_line="export PATH=\"\$HOME/.local/bin:\$PATH\""
+# PATH lacks the directory: add it in the profile the login shell reads. The
+# default is written as $HOME/.local/bin, for the shell to expand; a -p
+# directory as it is, quoted.
+if [ "$default" -eq 1 ]; then
+    entry="\$HOME/.local/bin"
+else
+    entry=$(printf '%s' "$target" | sed 's/[\\"$`]/\\&/g')
+fi
+marker="# Added by githelper's install.sh: $target"
 case "$(basename -- "${SHELL:-sh}")" in
-    zsh) profile="$HOME/.zprofile"; line=$export_line ;;
     bash)
         profile="$HOME/.bash_profile"
         [ -f "$profile" ] || profile="$HOME/.profile"
-        line=$export_line
+        line="export PATH=\"$entry:\$PATH\""
+        ;;
+    zsh)
+        profile="$HOME/.zprofile"
+        line="export PATH=\"$entry:\$PATH\""
         ;;
     fish)
         profile="$HOME/.config/fish/conf.d/githelper.fish"
         mkdir -p -- "$(dirname -- "$profile")"
-        line="fish_add_path --path \"\$HOME/.local/bin\""
+        if [ "$default" -eq 1 ]; then
+            line="fish_add_path --path \"\$HOME/.local/bin\""
+        else
+            # fish expands nothing inside single quotes; only \ and ' are escaped.
+            quoted=$(printf '%s' "$target" | sed "s/[\\\\']/\\\\&/g")
+            line="fish_add_path --path '$quoted'"
+        fi
         ;;
-    *) profile="$HOME/.profile"; line=$export_line ;;
+    dash | ksh | mksh | ksh93 | *)
+        # dash and ksh read ~/.profile as login shells, as POSIX sh does.
+        profile="$HOME/.profile"
+        line="export PATH=\"$entry:\$PATH\""
+        ;;
 esac
-if [ -f "$profile" ] && grep -qF -- "$marker" "$profile"; then
+if [ -f "$profile" ] && grep -qxF -- "$marker" "$profile"; then
     printf 'note: %s adds %s to PATH already; open a new login shell\n' "$profile" "$target"
     exit 0
 fi
