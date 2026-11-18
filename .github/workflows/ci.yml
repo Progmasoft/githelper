@@ -104,7 +104,8 @@ jobs:
           call install.cmd /path:%RUNNER_TEMP%\missing && exit /b 1
           call install.cmd /GLOBALENV && exit /b 1
           call install.cmd /help | findstr /C:"Usage: install.cmd" || exit /b 1
-          call install.cmd /? | findstr /C:"/globalenv" || exit /b 1
+          rem call shows its own help when /? follows it anywhere; cmd /c runs the script.
+          cmd /c install.cmd /? | findstr /C:"/globalenv" || exit /b 1
           exit /b 0
       - name: Install-Githelper.ps1
         shell: pwsh
