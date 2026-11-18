@@ -2,3 +2,6 @@
 # SPDX-License-Identifier: MIT-0
 
 * text=auto eol=lf
+
+# cmd.exe reads its scripts by lines it finds with CR LF; labels and goto need them.
+*.cmd text eol=crlf

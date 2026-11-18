@@ -32,11 +32,24 @@ githelper push
 
 ## Installing
 
-```sh
-go install github.com/Progmasoft/githelper/cmd/githelper@latest
-```
+The install scripts build githelper from a checkout with Go and install it. In a clone of this repository:
 
-or, from a clone, `go build -trimpath -o ~/.local/bin/githelper ./cmd/githelper`. githelper calls `git` with its
+| Command | Where githelper goes | Path |
+| --- | --- | --- |
+| `./install.sh` | `$HOME/.local/bin/githelper`, the directory created when missing | added to `PATH` in the profile of the login shell when missing |
+| `./install.sh -p <dir>` | `<dir>/githelper`; `<dir>` must exist, and `sudo` is used when it is not writable, as `/usr/bin` | not changed |
+| `install.cmd` | `%USERPROFILE%\.local\bin\githelper.exe`, the folders created when missing | added to the user Path when missing |
+| `install.cmd /globalenv` | the same | added to the machine Path; needs an administrator |
+| `install.cmd /path<dir>`, `/path:<dir>` | `<dir>\githelper.exe`; `<dir>` must exist | user Path, or machine Path with `/globalenv` |
+| `Install-Githelper.ps1` | as `install.cmd` | as `install.cmd` |
+| `Install-Githelper.ps1 -GlobalEnvironment` | as `install.cmd /globalenv` | machine Path |
+| `Install-Githelper.ps1 -Path <dir>`, with or without `-GlobalEnvironment` | as `install.cmd /path` | user or machine Path |
+
+`install.sh` is POSIX `sh`, for Linux, macOS and the BSDs; `Install-Githelper.ps1` needs PowerShell 7. Their help is
+`install.sh -h`, `install.cmd /?` or `install.cmd /HELP`, and `Install-Githelper.ps1 -Help`. The options of
+`install.sh` and `install.cmd` are case-sensitive, except `/HELP`; those of `Install-Githelper.ps1` are not.
+
+With Go alone: `go install github.com/Progmasoft/githelper/cmd/githelper@latest`. githelper calls `git` with its
 arguments directly and never builds a shell command.
 
 ## License
