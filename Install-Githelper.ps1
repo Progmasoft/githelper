@@ -45,25 +45,25 @@ if ($Help) {
     exit 0
 }
 
-function Stop-Install([string] $Message) {
+function Exit-WithInstallError([string] $Message) {
     [Console]::Error.WriteLine("Install-Githelper.ps1: $Message")
     exit 1
 }
 
 $source = $PSScriptRoot
 if (-not (Test-Path -LiteralPath (Join-Path $source 'go.mod') -PathType Leaf)) {
-    Stop-Install 'run Install-Githelper.ps1 from a checkout of githelper'
+    Exit-WithInstallError 'run Install-Githelper.ps1 from a checkout of githelper'
 }
 if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
-    Stop-Install 'Go is needed to build githelper: https://go.dev/dl/'
+    Exit-WithInstallError 'Go is needed to build githelper: https://go.dev/dl/'
 }
 
 if ($PSBoundParameters.ContainsKey('Path')) {
     if ([string]::IsNullOrWhiteSpace($Path)) {
-        Stop-Install '-Path needs a folder'
+        Exit-WithInstallError '-Path needs a folder'
     }
     if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
-        Stop-Install "$Path does not exist; create it first, or leave out -Path"
+        Exit-WithInstallError "$Path does not exist; create it first, or leave out -Path"
     }
     $target = (Resolve-Path -LiteralPath $Path).ProviderPath
 } else {
@@ -75,7 +75,7 @@ $scope = if ($GlobalEnvironment) { 'Machine' } else { 'User' }
 if ($scope -eq 'Machine') {
     $principal = [Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()
     if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-        Stop-Install '-GlobalEnvironment changes the machine Path; run PowerShell as an administrator'
+        Exit-WithInstallError '-GlobalEnvironment changes the machine Path; run PowerShell as an administrator'
     }
 }
 
@@ -91,7 +91,7 @@ try {
 }
 if (-not $built) {
     Remove-Item -LiteralPath $building -ErrorAction SilentlyContinue
-    Stop-Install 'the build failed'
+    Exit-WithInstallError 'the build failed'
 }
 Move-Item -LiteralPath $building -Destination $executable -Force
 Write-Output "installed $executable"
