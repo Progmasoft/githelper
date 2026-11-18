@@ -255,8 +255,8 @@ func TestTranscriptKeepsTheLatestLineAndCountsWarnings(t *testing.T) {
 func TestDescribeKeepsWhatNamesTheStep(t *testing.T) {
 	cases := map[string][]string{
 		"bazel build --config=fuzz //app/fuzzing:wire_fuzz_smoke": {"build", "--disk_cache=" + filepath.Join(t.TempDir(), "cache"), "--experimental_disk_cache_gc_max_size=10G", "--config=fuzz", "//app/fuzzing:wire_fuzz_smoke"},
-		"tar --zstd -xf llvm.tar.zst -C work":                       {"--zstd", "-xf", filepath.Join(t.TempDir(), "llvm.tar.zst"), "-C", filepath.Join(t.TempDir(), "work")},
-		"git a b c d e …":                                           {"a", "b", "c", "d", "e", "f"},
+		"tar --zstd -xf llvm.tar.zst -C work":                     {"--zstd", "-xf", filepath.Join(t.TempDir(), "llvm.tar.zst"), "-C", filepath.Join(t.TempDir(), "work")},
+		"git a b c d e …":                                         {"a", "b", "c", "d", "e", "f"},
 	}
 	for want, arguments := range cases {
 		name := "git"

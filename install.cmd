@@ -13,6 +13,8 @@ rem   install.cmd /path:<dir>     the same; /globalenv goes with either
 rem   install.cmd /? or /HELP     shows the help
 setlocal EnableExtensions DisableDelayedExpansion
 
+rem The folder of this script, taken first: shift moves the script name too.
+set "SOURCE=%~dp0"
 set "GITHELPER_TARGET="
 set "GITHELPER_GIVEN="
 set "GITHELPER_SCOPE=User"
@@ -48,7 +50,6 @@ shift
 goto :arguments
 
 :parsed
-set "SOURCE=%~dp0"
 if not exist "%SOURCE%go.mod" (
     echo install.cmd: run install.cmd from a checkout of githelper 1>&2
     exit /b 1
