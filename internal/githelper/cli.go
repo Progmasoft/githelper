@@ -1,0 +1,233 @@
+// SPDX-FileCopyrightText: 2026 Progmasoft <support@progmasoft.com>
+// SPDX-License-Identifier: MIT-0
+
+package githelper
+
+import (
+	"errors"
+	"fmt"
+	"io"
+	"os"
+
+	"github.com/Progmasoft/githelper/internal/console"
+	"github.com/spf13/cobra"
+)
+
+const longDescription = `Guarded Git workflow for Progmasoft's repositories.
+
+The helper stages safely, commits, and pushes without ever rewriting remote
+history. It keeps generated output and private agent notes out of the index
+and refuses to commit on the default branch.
+
+Typical topic-branch flow:
+  githelper start feature/name
+  githelper update "Describe the change"
+  githelper sync            # merge the default branch, then test
+  githelper push            # publish the merge
+
+A pull request that builds on another one:
+  githelper start feature/next --from feature/name
+  githelper merge feature/name   # take its new commits, then test and push
+
+The first commit of an empty repository:
+  githelper init --message-file message.txt
+
+The repository of the remote, for gh:
+  gh pr create --repo "$(githelper repo)"`
+
+// newCommand owns parsing independently of Git, so an invalid invocation
+// cannot stage, commit or push anything.
+func newCommand(runner gitRunner, output, errorOutput io.Writer) *cobra.Command {
+	root := &cobra.Command{
+		Use:           "githelper",
+		Short:         "Guarded Git workflow for Progmasoft's repositories",
+		Long:          longDescription,
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		Args:          cobra.NoArgs,
+		RunE:          func(command *cobra.Command, _ []string) error { return command.Help() },
+	}
+	root.SetOut(output)
+	root.SetErr(errorOutput)
+	root.CompletionOptions.DisableDefaultCmd = true
+
+	inRepository := func(action func(*cobra.Command, []string) error) func(*cobra.Command, []string) error {
+		return func(command *cobra.Command, arguments []string) error {
+			if err := requireWorkTree(runner); err != nil {
+				return err
+			}
+			return action(command, arguments)
+		}
+	}
+
+	options := updateOptions{}
+	messageFile := ""
+	updateCommand := &cobra.Command{
+		Use:   "update [message]",
+		Short: "Stage every change, commit, and push the current branch",
+		Long: `Stage every change, commit, and push the current branch.
+
+Generated output and files covered by an ignore rule are removed from the
+index before and after staging. The commit message is the argument or the
+content of --message-file and is committed as written. The push never forces.`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: inRepository(func(_ *cobra.Command, arguments []string) error {
+			message, err := resolveMessage(arguments, messageFile)
+			if err != nil {
+				return err
+			}
+			options.message = message
+			return update(runner, output, options)
+		}),
+	}
+	updateCommand.Flags().StringVarP(&messageFile, "message-file", "F", "", "read the commit message from this file")
+	updateCommand.Flags().BoolVar(&options.dryRun, "dry-run", false, "show what would be committed and change nothing")
+	updateCommand.Flags().BoolVar(&options.noPush, "no-push", false, "commit without pushing")
+	updateCommand.Flags().BoolVar(&options.allowDefaultBranch, "allow-default-branch", false, "permit a commit on the default branch")
+
+	from := ""
+	startCommand := &cobra.Command{
+		Use:   "start <branch>",
+		Short: "Create a topic branch from the remote default branch, or from --from",
+		Long: `Create a topic branch from the remote default branch.
+
+With --from, the branch starts from another branch instead, its remote copy
+when there is one: for a pull request that builds on one not merged yet.`,
+		Args: cobra.ExactArgs(1),
+		RunE: inRepository(func(_ *cobra.Command, arguments []string) error {
+			if from != "" {
+				return startFrom(runner, output, arguments[0], from)
+			}
+			return start(runner, output, arguments[0])
+		}),
+	}
+	startCommand.Flags().StringVar(&from, "from", "", "start from this branch instead of the default branch")
+
+	mergeCommand := &cobra.Command{
+		Use:   "merge <branch>",
+		Short: "Merge another branch into the current topic branch, without pushing",
+		Long: `Fetch and merge another branch into the current topic branch: its remote
+copy when there is one, the local branch otherwise.
+
+The work tree must be clean, and the current branch must not be the default
+branch. Nothing is pushed: test the merged tree, then run "githelper push".`,
+		Args: cobra.ExactArgs(1),
+		RunE: inRepository(func(_ *cobra.Command, arguments []string) error {
+			return merge(runner, output, arguments[0])
+		}),
+	}
+
+	initMessageFile := ""
+	initCommand := &cobra.Command{
+		Use:   "init [message]",
+		Short: "Make and push the first commit of an empty repository",
+		Long: `Stage every file, make the first commit of a repository that has none, on
+the branch HEAD names, and push it.
+
+It is the only commit githelper makes on the default branch, and it refuses
+a repository that has any commit already.`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: inRepository(func(_ *cobra.Command, arguments []string) error {
+			message, err := resolveMessage(arguments, initMessageFile)
+			if err != nil {
+				return err
+			}
+			return initialCommit(runner, output, message)
+		}),
+	}
+	initCommand.Flags().StringVarP(&initMessageFile, "message-file", "F", "", "read the commit message from this file")
+
+	root.AddCommand(
+		updateCommand,
+		&cobra.Command{
+			Use:   "push",
+			Short: "Push existing commits of the current branch without creating one",
+			Args:  cobra.NoArgs,
+			RunE:  inRepository(func(*cobra.Command, []string) error { return push(runner) }),
+		},
+		&cobra.Command{
+			Use:   "sync",
+			Short: "Merge the remote default branch into the current branch",
+			Long: `Fetch and merge the remote default branch into the current branch.
+
+The work tree must be clean. Nothing is pushed: test the merged tree, then
+publish it with "githelper push".`,
+			Args: cobra.NoArgs,
+			RunE: inRepository(func(*cobra.Command, []string) error { return sync(runner, output) }),
+		},
+		startCommand,
+		mergeCommand,
+		initCommand,
+		&cobra.Command{
+			Use:   "repo",
+			Short: "Print owner/name of the remote repository, for gh --repo",
+			Args:  cobra.NoArgs,
+			RunE: inRepository(func(*cobra.Command, []string) error {
+				name, err := repositoryName(runner)
+				if err != nil {
+					return err
+				}
+				fmt.Fprintln(output, name)
+				return nil
+			}),
+		},
+		&cobra.Command{
+			Use:     "status",
+			Aliases: []string{"uncom"},
+			Short:   "Show the branch, its upstream state, and uncommitted changes",
+			Args:    cobra.NoArgs,
+			RunE:    inRepository(func(*cobra.Command, []string) error { return status(runner, output) }),
+		},
+		&cobra.Command{
+			Use:   "clean",
+			Short: "Remove generated and ignored files from the index without committing",
+			Args:  cobra.NoArgs,
+			RunE:  inRepository(func(*cobra.Command, []string) error { return cleanIndex(runner) }),
+		},
+	)
+	return root
+}
+
+// resolveMessage takes the commit message from exactly one source.
+func resolveMessage(arguments []string, messageFile string) (string, error) {
+	switch {
+	case len(arguments) == 1 && messageFile != "":
+		return "", exitError{code: 2, message: "error: give the commit message as an argument or with --message-file, not both"}
+	case len(arguments) == 1:
+		return arguments[0], nil
+	case messageFile != "":
+		content, err := os.ReadFile(messageFile)
+		if err != nil {
+			return "", failf("the commit message file could not be read: %v", err)
+		}
+		return string(content), nil
+	default:
+		return "", exitError{code: 2, message: "error: a commit message is required"}
+	}
+}
+
+// Execute runs the helper with the given arguments and returns the process
+// exit code.
+func Execute(arguments []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	return execute(arguments, processRunner{stdin: stdin, stdout: stdout, stderr: stderr}, stdout, stderr)
+}
+
+func execute(arguments []string, runner processRunner, stdout, stderr io.Writer) int {
+	command := newCommand(runner, stdout, stderr)
+	command.SetArgs(arguments)
+	if err := command.Execute(); err != nil {
+		fmt.Fprintln(stderr, err)
+		var failure exitError
+		if errors.As(err, &failure) {
+			return failure.code
+		}
+		return 2
+	}
+	return 0
+}
+
+// Main is the entry point of the githelper command.
+func Main() {
+	runner := processRunner{stdin: os.Stdin, stdout: os.Stdout, stderr: os.Stderr, console: console.New()}
+	os.Exit(execute(os.Args[1:], runner, os.Stdout, os.Stderr))
+}
