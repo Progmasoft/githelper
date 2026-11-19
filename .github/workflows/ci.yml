@@ -92,21 +92,33 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+      # install.cmd runs in cmd.exe, called from PowerShell, so that every check stops the step when
+      # it fails; a cmd shell step goes on after a failed line.
       - name: install.cmd
-        shell: cmd
+        shell: pwsh
         run: |
-          call install.cmd || exit /b 1
-          if not exist "%USERPROFILE%\.local\bin\githelper.exe" exit /b 1
-          mkdir "%RUNNER_TEMP%\cmd-dest"
-          call install.cmd /path:%RUNNER_TEMP%\cmd-dest || exit /b 1
-          if not exist "%RUNNER_TEMP%\cmd-dest\githelper.exe" exit /b 1
-          call install.cmd /path%RUNNER_TEMP%\cmd-dest /globalenv || exit /b 1
-          call install.cmd /path:%RUNNER_TEMP%\missing && exit /b 1
-          call install.cmd /GLOBALENV && exit /b 1
-          call install.cmd /help | findstr /C:"Usage: install.cmd" || exit /b 1
-          rem call shows its own help when /? follows it anywhere; cmd /c runs the script.
-          cmd /c install.cmd /? | findstr /C:"/globalenv" || exit /b 1
-          exit /b 0
+          $ErrorActionPreference = 'Stop'
+          function Assert-Install([bool] $isGood, [string] $what) {
+            if (-not $isGood) { throw "install.cmd: $what" }
+          }
+          cmd /d /c install.cmd
+          Assert-Install ($LASTEXITCODE -eq 0) 'the default install failed'
+          Assert-Install (Test-Path "$env:USERPROFILE\.local\bin\githelper.exe") 'no githelper.exe in .local\bin'
+          New-Item -ItemType Directory "$env:RUNNER_TEMP\cmd-dest" | Out-Null
+          cmd /d /c install.cmd "/path:$env:RUNNER_TEMP\cmd-dest"
+          Assert-Install ($LASTEXITCODE -eq 0) '/path: failed'
+          Assert-Install (Test-Path "$env:RUNNER_TEMP\cmd-dest\githelper.exe") 'no githelper.exe in /path:'
+          cmd /d /c install.cmd "/path$env:RUNNER_TEMP\cmd-dest" /globalenv
+          Assert-Install ($LASTEXITCODE -eq 0) '/path without a colon and /globalenv failed'
+          cmd /d /c install.cmd "/path:$env:RUNNER_TEMP\missing"
+          Assert-Install ($LASTEXITCODE -ne 0) 'a missing /path: directory was accepted'
+          cmd /d /c install.cmd /GLOBALENV
+          Assert-Install ($LASTEXITCODE -ne 0) '/GLOBALENV without /path was accepted'
+          $usage = cmd /d /c install.cmd /help | Out-String
+          Assert-Install ($usage -match 'Usage: install\.cmd') '/help shows no usage'
+          $usage = cmd /d /c install.cmd /? | Out-String
+          Assert-Install ($usage -match '/globalenv') '/? shows no /globalenv'
+          exit 0
       - name: Install-Githelper.ps1
         shell: pwsh
         run: |
