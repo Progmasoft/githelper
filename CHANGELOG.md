@@ -9,3 +9,5 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 - githelper in a repository of its own, under MIT-0: `start`, `update`, `push`, `sync`, `status` and `clean`, with
   `start --from`, `merge`, `init` and `repo`.
+- `install.sh` (POSIX sh), `install.cmd` and `Install-Githelper.ps1` (PowerShell 7) build and install githelper,
+  and add its folder to the Path.
